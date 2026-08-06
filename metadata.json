@@ -1,0 +1,6 @@
+{
+  "name": "Whistle Stop Cleaning",
+  "description": "Professional residential and commercial cleaning booking platform with interactive estimate questionnaire, real-time availability calendar, Stripe payments, customer portal, SMS notifications, and admin price management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
