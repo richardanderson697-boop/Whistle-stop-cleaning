@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { PricingConfig, EstimateRequest, Booking, TimeSlot, NotificationLog, AddOnOption, SupplyItem, StaffMember, StripeConfigStatus } from '../types';
-import { ShieldCheck, DollarSign, FileText, Calendar, Clock, Image as ImageIcon, Send, Save, CheckCircle2, AlertCircle, RefreshCw, Lock, Trash2, Plus, Eye, X, Package, Users, PieChart, CreditCard, HelpCircle, Copy, Check, UserPlus, BarChart3, Wrench, Sparkles, Layers, Sliders, ChevronRight } from 'lucide-react';
+import { ShieldCheck, DollarSign, FileText, Calendar, Clock, Image as ImageIcon, Send, Save, CheckCircle2, AlertCircle, RefreshCw, Lock, Trash2, Plus, Eye, X, Package, Users, PieChart, CreditCard, HelpCircle, Copy, Check, UserPlus, BarChart3, Wrench, Sparkles, Layers, Sliders, ChevronRight, TrendingUp } from 'lucide-react';
+import { FinancialReconciliationView } from './FinancialReconciliationView';
 
 interface AdminPortalProps {
   onPricingUpdated: (newPricing: PricingConfig) => void;
 }
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({ onPricingUpdated }) => {
-  const [activeTab, setActiveTab] = useState<'pricing' | 'supplies' | 'cost_analysis' | 'dispatch' | 'estimates' | 'bookings' | 'stripe_setup' | 'notifs'>('pricing');
+  const [activeTab, setActiveTab] = useState<'financial_forecast' | 'pricing' | 'supplies' | 'cost_analysis' | 'dispatch' | 'estimates' | 'bookings' | 'stripe_setup' | 'notifs'>('financial_forecast');
 
   // Server Data Stores
   const [pricing, setPricing] = useState<PricingConfig | null>(null);
@@ -406,6 +407,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPricingUpdated }) =>
       {/* Navigation Tabs */}
       <div className="flex overflow-x-auto border-b border-stone-300 space-x-4 text-xs font-bold no-scrollbar pb-1">
         <button
+          onClick={() => setActiveTab('financial_forecast')}
+          className={`pb-2.5 flex items-center space-x-1.5 border-b-2 whitespace-nowrap transition-colors ${
+            activeTab === 'financial_forecast'
+              ? 'border-amber-500 text-stone-950 font-extrabold bg-amber-500/10 px-2 py-0.5 rounded-t-lg'
+              : 'border-transparent text-stone-500 hover:text-stone-900'
+          }`}
+        >
+          <TrendingUp className="w-4 h-4 text-amber-600" />
+          <span>Financial Reconciliation & Forecast</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('pricing')}
           className={`pb-2.5 flex items-center space-x-1.5 border-b-2 whitespace-nowrap transition-colors ${
             activeTab === 'pricing'
@@ -501,6 +514,20 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPricingUpdated }) =>
           <span>Dispatch Audit Log</span>
         </button>
       </div>
+
+      {/* TAB 0: FINANCIAL RECONCILIATION & FORECAST */}
+      {activeTab === 'financial_forecast' && (
+        <FinancialReconciliationView
+          bookings={bookings}
+          pricing={pricing}
+          staff={staff}
+          onRefreshData={fetchAllAdminData}
+          onAssignStaffClick={(bk) => {
+            setAssigningBooking(bk);
+            setSelectedStaffIds(bk.assignedStaffIds || []);
+          }}
+        />
+      )}
 
       {/* TAB 1: PRICING SETTINGS */}
       {activeTab === 'pricing' && pricing && (

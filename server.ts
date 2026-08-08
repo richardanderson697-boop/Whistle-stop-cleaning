@@ -3,6 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { defaultPricingConfig, sampleEstimateRequests, sampleBookings, generateInitialTimeSlots, sampleNotificationLogs, sampleSupplies, sampleStaff } from "./src/data/initialData";
 import { PricingConfig, EstimateRequest, Booking, TimeSlot, NotificationLog, User, SupplyItem, StaffMember, StripeConfigStatus } from "./src/types";
+import { computeFinancialReconciliation, calculateItemizedBreakdown } from "./src/utils/financial";
 
 // In-memory persistent database store for session runtime
 let pricingStore: PricingConfig = { ...defaultPricingConfig };
@@ -552,6 +553,14 @@ async function startServer() {
       avgProfitPerRoom,
       jobAnalysis,
     });
+  });
+
+  // --- FULL FINANCIAL RECONCILIATION & FORECAST ENDPOINT --- //
+
+  app.get("/api/admin/financial-forecast", (req, res) => {
+    const targetRevenue = Number(req.query.targetRevenue) || 3200;
+    const metrics = computeFinancialReconciliation(bookingStore, pricingStore, targetRevenue);
+    return res.json(metrics);
   });
 
   app.post("/api/bookings", (req, res) => {
