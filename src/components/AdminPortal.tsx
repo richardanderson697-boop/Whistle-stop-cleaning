@@ -130,11 +130,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPricingUpdated }) =>
         onPricingUpdated(data.pricing);
         setTimeout(() => setSaveSuccessMsg(''), 3000);
       } else {
-        alert(data.error || 'Failed to save pricing configuration');
+        setSaveSuccessMsg(data.error || 'Failed to save pricing configuration');
+        setTimeout(() => setSaveSuccessMsg(''), 4000);
       }
     } catch (e) {
       setIsSavingPricing(false);
-      alert('Error updating pricing configuration');
+      setSaveSuccessMsg('Error updating pricing configuration');
+      setTimeout(() => setSaveSuccessMsg(''), 4000);
     }
   };
 
@@ -285,11 +287,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPricingUpdated }) =>
         setStripePubVal('');
         setTimeout(() => setStripeKeyMsg(''), 4000);
       } else {
-        alert('Failed to update Stripe keys');
+        setStripeKeyMsg('Failed to update Stripe keys. Please check format.');
+        setTimeout(() => setStripeKeyMsg(''), 4000);
       }
     } catch (e) {
       setIsSavingStripeKeys(false);
-      alert('Error saving Stripe keys');
+      setStripeKeyMsg('Error saving Stripe keys');
+      setTimeout(() => setStripeKeyMsg(''), 4000);
     }
   };
 
@@ -314,15 +318,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onPricingUpdated }) =>
       setIsSendingQuote(false);
 
       if (res.ok && data.success) {
-        alert(`Quote of $${quotePrice} sent to ${selectedEst.customerEmail} and SMS dispatched!`);
         setSelectedEst(null);
         fetchAllAdminData();
       } else {
-        alert(data.error || 'Failed to send quote.');
+        console.error(data.error || 'Failed to send quote.');
       }
     } catch (e) {
       setIsSendingQuote(false);
-      alert('Error sending quote.');
+      console.error('Error sending quote:', e);
     }
   };
 

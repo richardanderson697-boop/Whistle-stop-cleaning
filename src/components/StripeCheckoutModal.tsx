@@ -25,6 +25,7 @@ export const StripeCheckoutModal: React.FC<StripeCheckoutModalProps> = ({
   // Payment State
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [paymentCompleted, setPaymentCompleted] = useState<Booking | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   const totalToPay = paymentOption === 'full' 
     ? (bookingData.totalPrice || 250) 
@@ -41,6 +42,7 @@ export const StripeCheckoutModal: React.FC<StripeCheckoutModalProps> = ({
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsProcessing(true);
+    setErrorMessage('');
 
     try {
       // Call server Stripe checkout session
@@ -77,12 +79,12 @@ export const StripeCheckoutModal: React.FC<StripeCheckoutModalProps> = ({
       if (bkRes.ok && bkData.success) {
         setPaymentCompleted(bkData.booking);
       } else {
-        alert(bkData.error || 'Payment failed. Please try again.');
+        setErrorMessage(bkData.error || 'Payment failed. Please try again.');
       }
     } catch (err) {
       setIsProcessing(false);
       console.error(err);
-      alert('Error connecting to payment processor.');
+      setErrorMessage('Error connecting to payment processor. Please check connection.');
     }
   };
 
@@ -294,6 +296,13 @@ export const StripeCheckoutModal: React.FC<StripeCheckoutModalProps> = ({
                 </div>
               </div>
             </div>
+
+            {errorMessage && (
+              <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-800 flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
 
             <div className="pt-2">
               <button

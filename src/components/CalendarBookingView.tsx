@@ -44,6 +44,7 @@ export const CalendarBookingView: React.FC<CalendarBookingViewProps> = ({
   const [customerEmail, setCustomerEmail] = useState<string>(currentUser?.email || '');
   const [propertyAddress, setPropertyAddress] = useState<string>(currentUser?.address || '');
   const [entryNotes, setEntryNotes] = useState<string>('');
+  const [formError, setFormError] = useState<string>('');
 
   // Fetch slots on mount
   useEffect(() => {
@@ -104,9 +105,10 @@ export const CalendarBookingView: React.FC<CalendarBookingViewProps> = ({
   const handleNextToPayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName || !customerPhone || !customerEmail || !propertyAddress) {
-      alert('Please fill out Name, Phone, Email, and Property Address.');
+      setFormError('Please fill out Name, Phone, Email, and Property Address.');
       return;
     }
+    setFormError('');
 
     const bookingDraft: Partial<Booking> = {
       category,
@@ -455,6 +457,12 @@ export const CalendarBookingView: React.FC<CalendarBookingViewProps> = ({
                   Pay 25% deposit now or full payment at Stripe checkout.
                 </p>
               </div>
+
+              {formError && (
+                <div className="p-3 bg-rose-900/40 border border-rose-500 rounded-xl text-xs text-rose-200">
+                  {formError}
+                </div>
+              )}
 
               <button
                 type="submit"

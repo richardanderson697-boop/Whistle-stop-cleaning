@@ -79,11 +79,12 @@ export const QuestionnaireView: React.FC<QuestionnaireViewProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName || !customerPhone || !customerEmail) {
-      alert('Please fill out your Name, Phone Number, and Email Address.');
+      setUploadError('Please fill out your Name, Phone Number, and Email Address.');
       return;
     }
 
     setIsSubmitting(true);
+    setUploadError('');
 
     try {
       const payload = {
@@ -116,12 +117,12 @@ export const QuestionnaireView: React.FC<QuestionnaireViewProps> = ({
         setSubmissionSuccess(data.estimate);
         onSubmitted(data.estimate);
       } else {
-        alert(data.error || 'Failed to submit estimate. Please try again.');
+        setUploadError(data.error || 'Failed to submit estimate. Please try again.');
       }
     } catch (err) {
       setIsSubmitting(false);
       console.error(err);
-      alert('Network error submitting request.');
+      setUploadError('Network error submitting request. Please try again.');
     }
   };
 
@@ -450,7 +451,7 @@ export const QuestionnaireView: React.FC<QuestionnaireViewProps> = ({
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-start space-x-3 text-xs text-emerald-900">
                   <Shield className="w-5 h-5 text-emerald-700 flex-shrink-0 mt-0.5" />
                   <div>
-                    <strong>24-Hour SLA Administrator Notice:</strong> This questionnaire will be routed directly to Administrator Email <strong>RichardAnderson697@gmail.com</strong>. You will receive an estimate call/email and SMS confirmation!
+                    <strong>24-Hour SLA Administrator Notice:</strong> This questionnaire will be routed directly to the Whistle Stop dispatch team (<strong>admin@whistlestopcleaning.com</strong>). You will receive an estimate confirmation call/email and SMS!
                   </div>
                 </div>
 
