@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import { defaultPricingConfig, sampleEstimateRequests, sampleBookings, generateInitialTimeSlots, sampleNotificationLogs, sampleSupplies, sampleStaff } from "./src/data/initialData";
 import { PricingConfig, EstimateRequest, Booking, TimeSlot, NotificationLog, User, SupplyItem, StaffMember, StripeConfigStatus } from "./src/types";
@@ -48,12 +49,61 @@ let usersStore: User[] = [
 // Active reset tokens map: email -> token
 const passwordResetTokens = new Map<string, { token: string; expiresAt: number }>();
 
+// Rate limiting storage for authentication endpoints
+const authRateLimiter = new Map<string, { count: number; firstAttempt: number }>();
+
+function checkAuthRateLimit(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const ip = req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+  const now = Date.now();
+  const windowMs = 5 * 60 * 1000; // 5 minute window
+  const maxAttempts = 15;
+
+  const entry = authRateLimiter.get(ip);
+  if (!entry || (now - entry.firstAttempt) > windowMs) {
+    authRateLimiter.set(ip, { count: 1, firstAttempt: now });
+    return next();
+  }
+
+  if (entry.count >= maxAttempts) {
+    return res.status(429).json({ error: "Too many authentication attempts. Please try again after 5 minutes." });
+  }
+
+  entry.count++;
+  next();
+}
+
+// Constant-time string comparison to prevent timing attack side-channels
+function safeTokenCompare(tokenA: string, tokenB: string): boolean {
+  try {
+    const bufA = Buffer.from(tokenA, 'utf8');
+    const bufB = Buffer.from(tokenB, 'utf8');
+    if (bufA.length !== bufB.length) {
+      crypto.timingSafeEqual(bufA, bufA);
+      return false;
+    }
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json({ limit: '25mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+  // Security Hardening: Disable information disclosure headers
+  app.disable('x-powered-by');
+
+  // Security Headers Middleware
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    next();
+  });
+
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
   // --- API ROUTES --- //
 
@@ -65,7 +115,7 @@ async function startServer() {
   // --- AUTH ENDPOINTS --- //
 
   // Login
-  app.post("/api/auth/login", (req, res) => {
+  app.post("/api/auth/login", checkAuthRateLimit, (req, res) => {
     const { email, password } = req.body;
     if (!email) {
       return res.status(400).json({ error: "Email is required" });
@@ -86,7 +136,7 @@ async function startServer() {
       return res.json({
         success: true,
         user: adminUser,
-        token: `mock-jwt-admin-${Date.now()}`
+        token: `ws-admin-${crypto.randomBytes(24).toString('hex')}`
       });
     }
 
@@ -94,7 +144,7 @@ async function startServer() {
     if (!existingUser) {
       // Create quick customer account on login if password supplied
       existingUser = {
-        id: `usr-${Date.now()}`,
+        id: `usr-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
         name: cleanEmail.split('@')[0].replace('.', ' '),
         email: cleanEmail,
         phone: "(555) 123-4567",
@@ -106,12 +156,12 @@ async function startServer() {
     return res.json({
       success: true,
       user: existingUser,
-      token: `mock-jwt-cust-${Date.now()}`
+      token: `ws-cust-${crypto.randomBytes(24).toString('hex')}`
     });
   });
 
   // Register
-  app.post("/api/auth/register", (req, res) => {
+  app.post("/api/auth/register", checkAuthRateLimit, (req, res) => {
     const { name, email, phone, address } = req.body;
     if (!email || !name) {
       return res.status(400).json({ error: "Name and email are required" });
@@ -125,34 +175,35 @@ async function startServer() {
     }
 
     const newUser: User = {
-      id: `usr-${Date.now()}`,
-      name,
+      id: `usr-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
+      name: String(name).trim().slice(0, 100),
       email: cleanEmail,
-      phone: phone || "(555) 000-0000",
+      phone: phone ? String(phone).trim().slice(0, 30) : "(555) 000-0000",
       role: cleanEmail === currentAdminEmail ? "admin" : "customer",
-      address: address || "",
+      address: address ? String(address).trim().slice(0, 200) : "",
     };
 
     usersStore.push(newUser);
     return res.json({ success: true, user: newUser });
   });
 
-  // Request Password Reset
-  app.post("/api/auth/forgot-password", (req, res) => {
+  // Request Password Reset - Cryptographically secure PRNG (CWE-338 fixed)
+  app.post("/api/auth/forgot-password", checkAuthRateLimit, (req, res) => {
     const { email } = req.body;
     if (!email) {
       return res.status(400).json({ error: "Email address is required" });
     }
 
     const cleanEmail = String(email).trim().toLowerCase();
-    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    // Use cryptographically secure integer generation (100000 - 999999)
+    const resetCode = crypto.randomInt(100000, 1000000).toString();
     const expiresAt = Date.now() + 15 * 60 * 1000; // 15 mins
 
     passwordResetTokens.set(cleanEmail, { token: resetCode, expiresAt });
 
     // Log notification dispatch to customer and administrator
     const notifEmail: NotificationLog = {
-      id: `NOTIF-${Date.now()}-1`,
+      id: `NOTIF-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
       recipient: cleanEmail,
       channel: 'EMAIL',
       subject: 'Password Reset Code - Whistle Stop Cleaning',
@@ -162,7 +213,7 @@ async function startServer() {
     };
 
     const notifSms: NotificationLog = {
-      id: `NOTIF-${Date.now()}-2`,
+      id: `NOTIF-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
       recipient: cleanEmail,
       channel: 'SMS',
       subject: 'Whistle Stop Security Code',
@@ -173,15 +224,15 @@ async function startServer() {
 
     notificationStore.unshift(notifEmail, notifSms);
 
+    // Security fix: Sensitive reset token is NEVER leaked in the JSON response
     return res.json({
       success: true,
-      message: `Reset verification code dispatched to ${cleanEmail}`,
-      simulatedCode: resetCode
+      message: `Reset verification code dispatched to ${cleanEmail}. Please check your SMS or Email notification center.`
     });
   });
 
-  // Perform Password Reset
-  app.post("/api/auth/reset-password", (req, res) => {
+  // Perform Password Reset - Protected against timing attack side-channels
+  app.post("/api/auth/reset-password", checkAuthRateLimit, (req, res) => {
     const { email, code, newPassword } = req.body;
     if (!email || !code || !newPassword) {
       return res.status(400).json({ error: "Email, code, and new password are required" });
@@ -190,7 +241,7 @@ async function startServer() {
     const cleanEmail = String(email).trim().toLowerCase();
     const tokenData = passwordResetTokens.get(cleanEmail);
 
-    if (!tokenData || tokenData.token !== String(code).trim() || Date.now() > tokenData.expiresAt) {
+    if (!tokenData || !safeTokenCompare(tokenData.token, String(code).trim()) || Date.now() > tokenData.expiresAt) {
       return res.status(400).json({ error: "Invalid or expired reset code. Please request a new code." });
     }
 
@@ -198,7 +249,7 @@ async function startServer() {
 
     // Confirm notification
     const confirmNotif: NotificationLog = {
-      id: `NOTIF-${Date.now()}`,
+      id: `NOTIF-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
       recipient: cleanEmail,
       channel: 'EMAIL',
       subject: 'Your Password Has Been Reset - Whistle Stop Cleaning',
@@ -239,19 +290,19 @@ async function startServer() {
     }
 
     const newEstimate: EstimateRequest = {
-      id: `EST-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: `EST-${crypto.randomInt(1000, 10000)}`,
       category: data.category || 'residential',
       cleaningType: data.cleaningType || 'one-time',
       squareFootage: Number(data.squareFootage) || 1500,
       bedrooms: Number(data.bedrooms) || 2,
       bathrooms: Number(data.bathrooms) || 2,
       frequencyPreference: data.frequencyPreference || 'one-time',
-      photos: Array.isArray(data.photos) ? data.photos : [],
-      customerName: data.customerName,
-      customerPhone: data.customerPhone,
-      customerEmail: String(data.customerEmail).trim().toLowerCase(),
-      propertyAddress: data.propertyAddress || "Address to be confirmed",
-      specialInstructions: data.specialInstructions || "",
+      photos: Array.isArray(data.photos) ? data.photos.slice(0, 10) : [],
+      customerName: String(data.customerName).slice(0, 100),
+      customerPhone: String(data.customerPhone).slice(0, 30),
+      customerEmail: String(data.customerEmail).trim().toLowerCase().slice(0, 100),
+      propertyAddress: data.propertyAddress ? String(data.propertyAddress).slice(0, 200) : "Address to be confirmed",
+      specialInstructions: data.specialInstructions ? String(data.specialInstructions).slice(0, 500) : "",
       preferredDate: data.preferredDate || "",
       preferredTimeSlot: data.preferredTimeSlot || "",
       status: 'pending',
@@ -570,13 +621,13 @@ async function startServer() {
     }
 
     const newBooking: Booking = {
-      id: `BK-${Math.floor(2000 + Math.random() * 8000)}`,
+      id: `BK-${crypto.randomInt(2000, 10000)}`,
       estimateId: data.estimateId || undefined,
-      customerId: data.customerId || `usr-${Date.now()}`,
-      customerName: data.customerName,
-      customerPhone: data.customerPhone || "(555) 000-0000",
-      customerEmail: String(data.customerEmail).trim().toLowerCase(),
-      propertyAddress: data.propertyAddress || "123 Main Street",
+      customerId: data.customerId || `usr-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
+      customerName: String(data.customerName).slice(0, 100),
+      customerPhone: String(data.customerPhone || "(555) 000-0000").slice(0, 30),
+      customerEmail: String(data.customerEmail).trim().toLowerCase().slice(0, 100),
+      propertyAddress: String(data.propertyAddress || "123 Main Street").slice(0, 200),
       category: data.category || 'residential',
       cleaningType: data.cleaningType || 'one-time',
       squareFootage: Number(data.squareFootage) || 1500,
@@ -589,8 +640,8 @@ async function startServer() {
       depositAmount: Number(data.depositAmount) || Number(data.totalPrice) || 250,
       paymentStatus: data.paymentStatus || 'fully_paid',
       bookingStatus: 'confirmed',
-      stripePaymentIntentId: data.stripePaymentIntentId || `pi_sim_${Date.now()}`,
-      entryNotes: data.entryNotes || "",
+      stripePaymentIntentId: data.stripePaymentIntentId || `pi_sim_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+      entryNotes: data.entryNotes ? String(data.entryNotes).slice(0, 500) : "",
       createdAt: new Date().toISOString(),
     };
 
@@ -604,7 +655,7 @@ async function startServer() {
 
     // Send SMS Confirmation & Email
     const bookingSms: NotificationLog = {
-      id: `NOTIF-BK-SMS-${Date.now()}`,
+      id: `NOTIF-BK-SMS-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
       recipient: newBooking.customerPhone,
       channel: 'SMS',
       subject: 'Whistle Stop Booking Confirmed!',
@@ -614,7 +665,7 @@ async function startServer() {
     };
 
     const bookingAdminEmail: NotificationLog = {
-      id: `NOTIF-BK-ADM-${Date.now()}`,
+      id: `NOTIF-BK-ADM-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
       recipient: process.env.ADMIN_EMAIL || "admin@whistlestopcleaning.com",
       channel: 'EMAIL',
       subject: `📅 New Booking Confirmed: ${newBooking.id} (${newBooking.customerName})`,
@@ -632,15 +683,33 @@ async function startServer() {
     });
   });
 
+  // Safe booking updates - Immune to Prototype Pollution (CWE-1321) & Mass Assignment (CWE-915)
   app.put("/api/bookings/:id", (req, res) => {
     const { id } = req.params;
     const updates = req.body;
+    if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+      return res.status(400).json({ error: "Invalid updates payload" });
+    }
+
     const bk = bookingStore.find(b => b.id === id);
     if (!bk) {
       return res.status(404).json({ error: "Booking not found" });
     }
 
-    Object.assign(bk, updates);
+    // Whitelist allowed fields to prevent prototype pollution and unauthorized mutation
+    const allowedFields: (keyof Booking)[] = [
+      'date', 'timeSlot', 'bookingStatus', 'paymentStatus', 'totalPrice',
+      'depositAmount', 'entryNotes', 'propertyAddress', 'cleaningType',
+      'squareFootage', 'bedrooms', 'bathrooms', 'selectedAddOns',
+      'assignedStaffIds', 'assignedStaffNames'
+    ];
+
+    for (const key of allowedFields) {
+      if (Object.prototype.hasOwnProperty.call(updates, key)) {
+        (bk as any)[key] = updates[key];
+      }
+    }
+
     return res.json({ success: true, booking: bk });
   });
 
@@ -660,10 +729,10 @@ async function startServer() {
       });
     }
 
-    // Standard Stripe simulator response for sandbox preview
+    // Cryptographically secure token generator for Stripe simulator response
     return res.json({
       success: true,
-      paymentIntentId: `pi_whistle_${Math.random().toString(36).substring(2, 10)}`,
+      paymentIntentId: `pi_whistle_${crypto.randomBytes(12).toString('hex')}`,
       status: "succeeded",
       amountPaid: amount || 250,
       currency: currency || "USD",
@@ -707,8 +776,8 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    app.get('*', (_req, res) => {
+      res.sendFile('index.html', { root: distPath });
     });
   }
 

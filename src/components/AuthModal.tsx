@@ -102,8 +102,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       if (res.ok && data.success) {
         setResetCodeSent(true);
-        setSimulatedCode(data.simulatedCode || '123456');
-        setMessage(`Security verification code sent to ${email} (Simulated code: ${data.simulatedCode})`);
+        setMessage(`Security verification code dispatched to ${email}. Check your Notification Center in the header.`);
       } else {
         setError(data.error || 'Password recovery request failed.');
       }
@@ -359,13 +358,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </form>
               ) : (
                 <form onSubmit={handleConfirmPasswordReset} className="space-y-4">
-                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900">
-                    Enter the 6-digit verification code sent to <strong>{email}</strong>.
-                    {simulatedCode && (
-                      <div className="font-mono mt-1 font-extrabold text-amber-800">
-                        Simulated Code: {simulatedCode}
-                      </div>
-                    )}
+                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 space-y-1">
+                    <div>Enter the 6-digit verification code sent to <strong>{email}</strong>.</div>
+                    <div className="text-[11px] text-amber-800">
+                      💡 Check the <strong>Notification Center (🔔 icon)</strong> in the header to view your dispatched security verification code.
+                    </div>
                   </div>
 
                   <div>

@@ -163,16 +163,31 @@ export default function App() {
           ) : (
             <div className="max-w-md mx-auto my-16 p-8 bg-white rounded-2xl border border-stone-300 text-center space-y-4 shadow-xl">
               <ShieldCheck className="w-12 h-12 text-amber-500 mx-auto" />
-              <h2 className="text-xl font-serif font-bold">Customer Portal Authentication Required</h2>
+              <h2 className="text-xl font-serif font-bold">Customer Portal Access</h2>
               <p className="text-xs text-stone-600">
-                Please sign in to view your scheduled bookings, quotes, and payment receipts.
+                Sign in to view your scheduled bookings, quotes, and payment receipts, or test with a demo account.
               </p>
-              <button
-                onClick={() => setIsAuthModalOpen(true)}
-                className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-sm rounded-xl shadow-md"
-              >
-                Sign In or Register Account
-              </button>
+              <div className="space-y-2 pt-2">
+                <button
+                  onClick={() => setIsAuthModalOpen(true)}
+                  className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-stone-950 font-extrabold text-sm rounded-xl shadow-md transition-all"
+                >
+                  Sign In or Register Account
+                </button>
+                <button
+                  onClick={() => setCurrentUser({
+                    id: 'usr-099',
+                    name: 'Marcus Vance',
+                    email: 'mvance@techcorp.io',
+                    phone: '(555) 888-1122',
+                    role: 'customer'
+                  })}
+                  className="w-full py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs rounded-xl border border-stone-300 transition-all flex items-center justify-center space-x-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Instant Quick Demo Customer Access</span>
+                </button>
+              </div>
             </div>
           )
         )}
